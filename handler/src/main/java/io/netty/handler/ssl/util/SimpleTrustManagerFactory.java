@@ -17,11 +17,14 @@
 package io.netty.handler.ssl.util;
 
 import io.netty.util.concurrent.FastThreadLocal;
+import io.netty.util.internal.PlatformDependent;
 
 import javax.net.ssl.ManagerFactoryParameters;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.TrustManagerFactorySpi;
+import javax.net.ssl.X509ExtendedTrustManager;
+import javax.net.ssl.X509TrustManager;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
@@ -98,9 +101,19 @@ public abstract class SimpleTrustManagerFactory extends TrustManagerFactory {
     static final class SimpleTrustManagerFactorySpi extends TrustManagerFactorySpi {
 
         private SimpleTrustManagerFactory parent;
+        private TrustManager[] trustManagers;
 
         void init(SimpleTrustManagerFactory parent) {
             this.parent = parent;
+            trustManagers = parent.engineGetTrustManagers();
+            if (PlatformDependent.javaVersion() >= 7) {
+                for (int i = 0; i < trustManagers.length; i++) {
+                    final TrustManager tm = trustManagers[i];
+                    if (tm instanceof X509TrustManager && !(tm instanceof X509ExtendedTrustManager)) {
+                        trustManagers[i] = new X509TrustManagerWrapper((X509TrustManager) tm);
+                    }
+                }
+            }
         }
 
         @Override
@@ -128,7 +141,7 @@ public abstract class SimpleTrustManagerFactory extends TrustManagerFactory {
 
         @Override
         protected TrustManager[] engineGetTrustManagers() {
-            return parent.engineGetTrustManagers();
+            return trustManagers;
         }
     }
 }
